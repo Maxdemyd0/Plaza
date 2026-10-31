@@ -30,12 +30,14 @@ public:
     Q_INVOKABLE bool supports(const QString& backend) const;
     Q_INVOKABLE bool isInstalled(const QString& package) const;
     Q_INVOKABLE void install(const QString& backend, const QString& repository, const QString& package);
+    Q_INVOKABLE bool installFiles(const QStringList& files);
     Q_INVOKABLE void cancel();
     Q_INVOKABLE void checkUpdates();
     Q_INVOKABLE void updateAll();
 signals:
     void changed();
     void installed(const QString& package);
+    void filesInstalled();
     void updatesInstalled();
 private slots:
     void packageFound(uint info, const QString& packageId, const QString& summary);
@@ -51,12 +53,13 @@ private:
     bool resolving_ = false;
     bool cancelled_ = false;
     bool alreadyInstalled_ = false;
-    enum class Operation { Resolve, Install, CheckUpdates, UpdatePackages };
+    enum class Operation { Resolve, Install, InstallFiles, CheckUpdates, UpdatePackages };
     Operation operation_ = Operation::Resolve;
     int progress_ = 0;
     int cacheVersion_ = 0;
     QString package_, repository_, path_, status_, error_, transactionError_;
     QStringList candidates_;
+    QStringList filePaths_;
     QStringList updatePackageIds_;
     QSet<QString> installed_;
     QVariantList updates_;

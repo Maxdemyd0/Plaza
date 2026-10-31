@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Plaza
-        VERSION 1.0.0
+        VERSION 1.1.0
         LANGUAGES CXX
 )
 
@@ -46,6 +46,8 @@ qt_add_executable(plaza
 
         src/backends/FlatpakBackend.h
         src/backends/FlatpakBackend.cpp
+        src/backends/GitHubUpdateController.h
+        src/backends/GitHubUpdateController.cpp
         src/backends/FlatpakCatalog.h
         src/backends/FlatpakCatalog.cpp
         src/backends/PopularityProvider.h
@@ -57,9 +59,20 @@ qt_add_executable(plaza
 qt_add_qml_module(plaza
         URI Plaza
         VERSION 1.0
+        NO_IMPORT_SCAN
 
         QML_FILES
         Main.qml
+)
+
+qt_add_resources(plaza plaza_icons
+        PREFIX "/"
+        FILES icons/plaza.svg
+)
+
+qt_add_resources(plaza plaza_catalog
+        PREFIX "/"
+        FILES db/catalog.sql
 )
 
 target_link_libraries(plaza
@@ -82,6 +95,31 @@ install(TARGETS plaza
 install(FILES plaza.desktop
         DESTINATION share/applications
 )
+install(FILES icons/plaza.svg
+        DESTINATION share/icons/hicolor/scalable/apps
+)
+
+set(CPACK_GENERATOR DEB)
+set(CPACK_PACKAGE_NAME plaza)
+set(CPACK_PACKAGE_VENDOR Maxdemyd0)
+set(CPACK_PACKAGE_CONTACT "Maxdemyd0")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Plaza software center")
+set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Maxdemyd0")
+set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS
+    "flatpak, libqt6sql6-sqlite, qml6-module-org-kde-kirigami, qml6-module-org-kde-desktop, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick, packagekit"
+)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64)
+    set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_amd64")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE arm64)
+    set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_arm64")
+endif()
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "packagekit-backend-aptcc")
+include(CPack)
 
 include(CTest)
 if (BUILD_TESTING)
@@ -95,13 +133,40 @@ if (BUILD_TESTING)
     add_test(NAME app_search_test COMMAND app_search_test)
     qt_add_executable(flatpak_catalog_test
         tests/FlatpakCatalogTest.cpp
+        src/database/DatabaseController.h
+        src/database/DatabaseController.cpp
         src/backends/FlatpakCatalog.h
         src/backends/FlatpakCatalog.cpp
         src/models/AppListModel.h
         src/models/AppListModel.cpp
     )
+    qt_add_resources(flatpak_catalog_test plaza_test_catalog
+        PREFIX "/"
+        FILES db/catalog.sql
+    )
     target_link_libraries(flatpak_catalog_test PRIVATE Qt6::Test Qt6::Sql Qt6::Concurrent PkgConfig::FLATPAK ZLIB::ZLIB)
     add_test(NAME flatpak_catalog_test COMMAND flatpak_catalog_test)
+    qt_add_executable(flatpak_backend_test
+        tests/FlatpakBackendTest.cpp
+        src/backends/FlatpakBackend.h
+        src/backends/FlatpakBackend.cpp
+    )
+    target_link_libraries(flatpak_backend_test PRIVATE
+        Qt6::Test Qt6::Network Qt6::Concurrent PkgConfig::FLATPAK
+    )
+    add_test(NAME flatpak_backend_test COMMAND flatpak_backend_test)
+    qt_add_executable(github_update_controller_test
+        tests/GitHubUpdateControllerTest.cpp
+        src/backends/GitHubUpdateController.h
+        src/backends/GitHubUpdateController.cpp
+        src/backends/PackageKitBackend.h
+        src/backends/PackageKitBackend.cpp
+    )
+    target_link_libraries(github_update_controller_test PRIVATE
+        Qt6::Test Qt6::Network Qt6::DBus
+    )
+    add_test(NAME github_update_controller_test
+        COMMAND dbus-run-session -- $<TARGET_FILE:github_update_controller_test>)
     qt_add_executable(packagekit_backend_test tests/PackageKitBackendTest.cpp
         src/backends/PackageKitBackend.h src/backends/PackageKitBackend.cpp)
     target_link_libraries(packagekit_backend_test PRIVATE Qt6::Test Qt6::DBus)

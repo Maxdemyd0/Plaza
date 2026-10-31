@@ -8,7 +8,7 @@ Kirigami.ApplicationWindow {
 
     width: 1100
     height: 720
-    minimumWidth: 760
+    minimumWidth: 640
     minimumHeight: 520
 
     visible: true
@@ -36,9 +36,9 @@ Kirigami.ApplicationWindow {
                 Layout.topMargin: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
-                    source: "system-software-install"
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 30
+                    source: "qrc:/icons/plaza.svg"
+                    Layout.preferredWidth: 35
+                    Layout.preferredHeight: 35
                 }
 
                 Controls.Label {
@@ -207,7 +207,7 @@ Kirigami.ApplicationWindow {
                     ? qsTr("No applications match your search. Try a different name or clear the search.")
                     : softwarePage.showingInstalled
                         ? qsTr("No installed applications were found.")
-                        : qsTr("No applications were found. Configure a Flatpak source and make its app catalog available, or connect the Plaza catalog database.")
+                        : qsTr("No applications were found. Add a software source in Sources, then try again.")
                 wrapMode: Text.WordWrap
                 opacity: 0.72
             }
@@ -226,11 +226,45 @@ Kirigami.ApplicationWindow {
                 text: packageBackend.errorText
             }
 
-            Kirigami.InlineMessage {
+            ColumnLayout {
                 Layout.fillWidth: true
-                visible: root.currentSection === 0 && !catalogDatabaseAvailable && !softwarePage.showingInstalled
-                type: Kirigami.MessageType.Warning
-                text: qsTr("The Plaza catalog database is unavailable. Showing cached Flatpak sources instead.")
+                visible: plazaUpdates.busy || plazaUpdates.updateAvailable
+                    || plazaUpdates.errorText.length > 0 || plazaUpdates.restartRequired
+                spacing: Kirigami.Units.smallSpacing
+
+                Controls.Label {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    visible: text.length > 0
+                    wrapMode: Text.WordWrap
+                    text: plazaUpdates.errorText.length > 0
+                        ? plazaUpdates.errorText : plazaUpdates.statusText
+                }
+
+                Controls.ProgressBar {
+                    Layout.fillWidth: true
+                    visible: plazaUpdates.busy
+                    indeterminate: plazaUpdates.checking
+                    from: 0
+                    to: 100
+                    value: plazaUpdates.progress
+                }
+
+                Controls.Button {
+                    Layout.alignment: Qt.AlignRight
+                    visible: plazaUpdates.downloadReady || plazaUpdates.restartRequired
+                    enabled: plazaUpdates.restartRequired
+                        || (plazaUpdates.downloadReady && !plazaUpdates.busy)
+                    text: plazaUpdates.restartRequired
+                        ? qsTr("Restart Plaza")
+                        : plazaUpdates.busy
+                            ? qsTr("Updating Plaza…")
+                            : qsTr("Download and install Plaza update")
+                    icon.name: plazaUpdates.restartRequired ? "system-reboot" : "download"
+                    onClicked: plazaUpdates.restartRequired
+                        ? plazaUpdates.restartPlaza()
+                        : plazaUpdates.downloadAndInstall()
+                }
             }
 
             Controls.Label {
@@ -243,7 +277,7 @@ Kirigami.ApplicationWindow {
             GridLayout {
                 visible: root.currentSection < 2
                 Layout.fillWidth: true
-                columns: Math.max(1, Math.min(4, Math.floor(width / 220)))
+                columns: Math.max(1, Math.min(4, Math.floor(width / 260)))
                 columnSpacing: Kirigami.Units.largeSpacing
                 rowSpacing: Kirigami.Units.largeSpacing
 
@@ -297,7 +331,7 @@ Kirigami.ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 1
-                    Layout.preferredHeight: 240
+                    Layout.minimumHeight: 240
 
                     contentItem: ColumnLayout {
                         spacing: Kirigami.Units.smallSpacing
@@ -319,10 +353,15 @@ Kirigami.ApplicationWindow {
                                 spacing: 2
 
                                 RowLayout {
+                                    Layout.fillWidth: true
+
                                     Controls.Label {
                                         text: displayName
                                         font.bold: true
                                         font.pointSize: 13
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        wrapMode: Text.WordWrap
                                     }
 
                                     Kirigami.Icon {
@@ -359,8 +398,9 @@ Kirigami.ApplicationWindow {
                             })
                         }
 
-                        RowLayout {
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
 
                             Controls.Label {
                                 text: selectedBackend.length === 0
@@ -370,49 +410,54 @@ Kirigami.ApplicationWindow {
                                         : selectedBackend
 
                                 opacity: 0.65
-                            }
-
-                            Item {
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                elide: Text.ElideRight
                             }
 
-                            Controls.Button {
-                                text: installingThisApp
-                                        ? qsTr("Cancel")
-                                        : flatpakInstalled
-                                            ? qsTr("Open")
-                                            : alreadyInstalled
-                                                ? qsTr("Installed")
-                                                : !flatpakRow && !nativeRow
-                                                    ? qsTr("Coming soon")
-                                                    : qsTr("Install")
-                                icon.name: installingThisApp
-                                        ? "dialog-cancel"
-                                        : flatpakInstalled
-                                            ? "system-run"
-                                            : alreadyInstalled
-                                                ? "emblem-ok"
-                                                : !flatpakRow && !nativeRow
-                                                    ? "dialog-information"
-                                                    : "download"
-                                enabled: installingThisApp || flatpakInstalled || (
-                                    !alreadyInstalled && (flatpakRow || nativeRow)
-                                    && !anotherAppInstalling
-                                )
+                            RowLayout {
+                                Layout.fillWidth: true
 
-                                onClicked: {
-                                    if (installingThisApp) {
-                                        if (flatpakRow) flatpakBackend.cancel()
-                                        else packageBackend.cancel()
-                                    } else if (flatpakInstalled) {
-                                        flatpakBackend.launch(selectedPackageId)
-                                    } else if (nativeRow) {
-                                        packageBackend.install(selectedBackend, selectedRepository, selectedPackageId)
-                                    } else {
-                                        flatpakBackend.install(
-                                            selectedRepository,
-                                            selectedPackageId
-                                        )
+                                Item { Layout.fillWidth: true }
+
+                                Controls.Button {
+                                    text: installingThisApp
+                                            ? qsTr("Cancel")
+                                            : flatpakInstalled
+                                                ? qsTr("Open")
+                                                : alreadyInstalled
+                                                    ? qsTr("Installed")
+                                                    : !flatpakRow && !nativeRow
+                                                        ? qsTr("Coming soon")
+                                                        : qsTr("Install")
+                                    icon.name: installingThisApp
+                                            ? "dialog-cancel"
+                                            : flatpakInstalled
+                                                ? "system-run"
+                                                : alreadyInstalled
+                                                    ? "emblem-ok"
+                                                    : !flatpakRow && !nativeRow
+                                                        ? "dialog-information"
+                                                        : "download"
+                                    enabled: installingThisApp || flatpakInstalled || (
+                                        !alreadyInstalled && (flatpakRow || nativeRow)
+                                        && !anotherAppInstalling
+                                    )
+
+                                    onClicked: {
+                                        if (installingThisApp) {
+                                            if (flatpakRow) flatpakBackend.cancel()
+                                            else packageBackend.cancel()
+                                        } else if (flatpakInstalled) {
+                                            flatpakBackend.launch(selectedPackageId)
+                                        } else if (nativeRow) {
+                                            packageBackend.install(selectedBackend, selectedRepository, selectedPackageId)
+                                        } else {
+                                            flatpakBackend.install(
+                                                selectedRepository,
+                                                selectedPackageId
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -428,6 +473,7 @@ Kirigami.ApplicationWindow {
                                 opacity: 0.72
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: 0
                             }
 
                             Controls.ProgressBar {
@@ -515,7 +561,12 @@ Kirigami.ApplicationWindow {
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                Controls.Label { text: name; font.bold: true }
+                                Controls.Label {
+                                    text: name
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
                                 Controls.Label {
                                     text: qsTr("Flatpak · %1 · %2").arg(kind).arg(branch)
                                     opacity: 0.72
@@ -549,7 +600,12 @@ Kirigami.ApplicationWindow {
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                Controls.Label { text: name; font.bold: true }
+                                Controls.Label {
+                                    text: name
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
                                 Controls.Label {
                                     text: summary.length > 0 ? summary : packageId
                                     opacity: 0.72
@@ -656,6 +712,8 @@ Kirigami.ApplicationWindow {
                                 Controls.Label {
                                     text: title.length > 0 ? title : remoteName
                                     font.bold: true
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
                                 }
                                 Controls.Label {
                                     text: qsTr("%1 · %2").arg(remoteName).arg(gpgVerified ? qsTr("GPG verified") : qsTr("Not verified"))
@@ -723,8 +781,18 @@ Kirigami.ApplicationWindow {
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                Controls.Label { text: repository.length > 0 ? repository : backend.toUpperCase(); font.bold: true }
-                                Controls.Label { text: backend.toUpperCase() + qsTr(" · managed by the operating system"); opacity: 0.72 }
+                                Controls.Label {
+                                    text: repository.length > 0 ? repository : backend.toUpperCase()
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
+                                Controls.Label {
+                                    text: backend.toUpperCase() + qsTr(" · managed by the operating system")
+                                    opacity: 0.72
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                }
                             }
                             Controls.Label { text: qsTr("%n catalog app(s)", "", appCount); opacity: 0.72 }
                         }
@@ -746,7 +814,8 @@ Kirigami.ApplicationWindow {
         id: addSourceDialog
         title: qsTr("Add Flatpak source")
         standardButtons: Kirigami.Dialog.NoButton
-        preferredWidth: Kirigami.Units.gridUnit * 28
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 28,
+                                 root.width - 2 * Kirigami.Units.largeSpacing)
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.mediumSpacing
@@ -789,7 +858,8 @@ Kirigami.ApplicationWindow {
         id: removeSourceDialog
         title: qsTr("Remove Flatpak source?")
         standardButtons: Kirigami.Dialog.NoButton
-        preferredWidth: Kirigami.Units.gridUnit * 26
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 26,
+                                 root.width - 2 * Kirigami.Units.largeSpacing)
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.mediumSpacing
@@ -818,7 +888,8 @@ Kirigami.ApplicationWindow {
         id: activityDialog
         title: qsTr("Installation activity")
         standardButtons: Kirigami.Dialog.NoButton
-        preferredWidth: Kirigami.Units.gridUnit * 24
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 24,
+                                 root.width - 2 * Kirigami.Units.largeSpacing)
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.mediumSpacing
@@ -853,7 +924,8 @@ Kirigami.ApplicationWindow {
         id: settingsDialog
         title: qsTr("Plaza settings")
         standardButtons: Kirigami.Dialog.Close
-        preferredWidth: Kirigami.Units.gridUnit * 24
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 24,
+                                 root.width - 2 * Kirigami.Units.largeSpacing)
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.mediumSpacing

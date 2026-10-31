@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Plaza is a calm, unified software center for Orbis OS and Linux desktops.">
+  <title>Plaza — software, all in one place</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --page: #17191b;
+      --panel: #202326;
+      --line: #373b3f;
+      --text: #f5f5f3;
+      --muted: #b5bbc0;
+      --yellow: #f6c343;
+      --yellow-ink: #201a0c;
+      font-family: Inter, "Noto Sans", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(ellipse at 50% -20%, #34302a 0, var(--page) 55%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: inherit; }
+    .shell { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; font-size: 1.25rem; font-weight: 750; text-decoration: none; }
+    .brand img { width: 38px; height: 38px; }
+    nav { display: flex; flex-wrap: wrap; gap: 22px; }
+    nav a { color: var(--muted); text-decoration: none; }
+    nav a:hover, nav a:focus-visible { color: var(--text); }
+    .hero { padding: clamp(62px, 11vw, 126px) 0 80px; text-align: center; }
+    .eyebrow { color: var(--yellow); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 850px; margin: 16px auto; font-size: clamp(2.7rem, 8vw, 5.6rem); line-height: 1.02; letter-spacing: -.055em; }
+    .hero p { max-width: 680px; margin: 22px auto 30px; color: var(--muted); font-size: clamp(1.05rem, 2.3vw, 1.3rem); }
+    .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+    .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; padding: 10px 20px; border: 1px solid var(--line); border-radius: 12px; font-weight: 700; text-decoration: none; }
+    .button.primary { border-color: var(--yellow); background: var(--yellow); color: var(--yellow-ink); }
+    .button:hover { transform: translateY(-1px); }
+    .note { margin-top: 16px !important; font-size: .92rem !important; }
+    section { padding: 34px 0 58px; }
+    h2 { margin: 0 0 12px; font-size: clamp(1.7rem, 4vw, 2.4rem); letter-spacing: -.03em; }
+    .lead { max-width: 690px; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+    .card { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: color-mix(in srgb, var(--panel) 92%, transparent); }
+    .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+    .card p { margin: 0; color: var(--muted); }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 24px 0 0; padding: 0; list-style: none; counter-reset: steps; }
+    .steps li { counter-increment: steps; padding: 18px; border-left: 2px solid var(--yellow); background: var(--panel); }
+    .steps li::before { content: "0" counter(steps); display: block; margin-bottom: 8px; color: var(--yellow); font-weight: 800; }
+    .docs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+    footer { padding: 26px 0 40px; border-top: 1px solid var(--line); color: var(--muted); }
+    footer .shell { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+    @media (max-width: 760px) {
+      header { align-items: flex-start; flex-direction: column; }
+      nav { gap: 14px; }
+      .grid, .steps { grid-template-columns: 1fr; }
+      .hero { padding-top: 62px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header class="shell">
+    <a class="brand" href="#top" aria-label="Plaza home">
+      <img src="icons/plaza.svg" alt="">
+      <span>Plaza</span>
+    </a>
+    <nav aria-label="Main navigation">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="docs/">Documentation</a>
+      <a href="https://github.com/Maxdemyd0/Plaza">Source code</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="shell hero">
+      <div class="eyebrow">For Orbis OS and Linux</div>
+      <h1>Software, all in one place.</h1>
+      <p>Discover, install, and keep track of applications with Plaza—a focused software center built for KDE Plasma and Debian-based systems.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/Maxdemyd0/Plaza/releases/latest">Download the latest release</a>
+        <a class="button" href="https://github.com/Maxdemyd0/Plaza">Explore the source</a>
+      </div>
+      <p class="note">Free and open source · MIT licensed · Flatpak installs stay in your user account</p>
+    </section>
+
+    <section class="shell" id="features">
+      <h2>A simpler way to manage apps</h2>
+      <p class="lead">Plaza brings app discovery and installation into one familiar desktop experience, while leaving each package manager in charge of its own software.</p>
+      <div class="grid">
+        <article class="card"><h3>Discover and search</h3><p>Browse a bundled starter catalog and enrich it with app listings from configured Flatpak sources.</p></article>
+        <article class="card"><h3>Install with progress</h3><p>Install Flatpak apps directly in Plaza, with progress, cancellation, and launch controls in the app card.</p></article>
+        <article class="card"><h3>See what is installed</h3><p>Match installed apps to store listings where possible, while keeping their original launchers and ownership.</p></article>
+        <article class="card"><h3>Keep software current</h3><p>Check Flatpak and supported system-package updates, and get notified when a Plaza release is available.</p></article>
+        <article class="card"><h3>Sources stay transparent</h3><p>Review and manage user Flatpak remotes. Plaza does not silently substitute a different source.</p></article>
+        <article class="card"><h3>No catalog server setup</h3><p>The starter catalog is bundled with Plaza. PostgreSQL is not required to open the app or browse its starter listings.</p></article>
+      </div>
+    </section>
+
+    <section class="shell" id="how-it-works">
+      <h2>Install without the scavenger hunt</h2>
+      <p class="lead">Plaza uses the package sources that fit the current system and hands privileged package operations to the operating system.</p>
+      <ol class="steps">
+        <li>Open Plaza and find an app in Discover.</li>
+        <li>Choose Install and follow the in-card progress.</li>
+        <li>Open the app from Plaza when it is ready.</li>
+      </ol>
+      <div class="docs">
+        <a class="button" href="docs/">Read the user guide</a>
+        <a class="button" href="https://github.com/Maxdemyd0/Plaza/issues">Report a problem</a>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="shell"><span>Plaza is MIT licensed.</span><a href="https://github.com/Maxdemyd0/Plaza">GitHub repository</a></div></footer>
+</body>
+</html>

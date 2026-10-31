@@ -5,6 +5,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 
 namespace {
@@ -55,6 +56,40 @@ void PackageKitBackend::install(const QString& backend, const QString& repositor
     status_ = tr("Resolving package…");
     emit changed();
     createTransaction();
+}
+
+bool PackageKitBackend::installFiles(const QStringList& files)
+{
+    if (busy_) return false;
+    if (!supports(QStringLiteral("apt")) || files.isEmpty()) {
+        error_ = tr("Local package updates require a Debian-based system with PackageKit.");
+        emit changed();
+        return false;
+    }
+
+    for (const QString& path : files) {
+        const QFileInfo file(path);
+        if (!file.isAbsolute() || !file.isFile() || !file.isReadable()
+            || file.suffix().compare(QStringLiteral("deb"), Qt::CaseInsensitive) != 0) {
+            error_ = tr("The Plaza update package is missing or invalid.");
+            emit changed();
+            return false;
+        }
+    }
+
+    package_ = QStringLiteral("Plaza");
+    filePaths_ = files;
+    error_.clear();
+    transactionError_.clear();
+    cancelled_ = false;
+    resolving_ = false;
+    operation_ = Operation::InstallFiles;
+    busy_ = true;
+    progress_ = 0;
+    status_ = tr("Installing Plaza update…");
+    emit changed();
+    createTransaction();
+    return true;
 }
 
 void PackageKitBackend::checkUpdates()
@@ -111,6 +146,7 @@ void PackageKitBackend::createTransaction()
         bus_.connect(service, path_, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this, SLOT(propertiesChanged(QString,QVariantMap,QStringList)));
         const QString methodName = operation_ == Operation::Resolve ? QStringLiteral("Resolve")
             : operation_ == Operation::Install ? QStringLiteral("InstallPackages")
+            : operation_ == Operation::InstallFiles ? QStringLiteral("InstallFiles")
             : operation_ == Operation::CheckUpdates ? QStringLiteral("GetUpdates")
             : QStringLiteral("UpdatePackages");
         QDBusMessage request = QDBusMessage::createMethodCall(service, path_, transactionInterface, methodName);
@@ -120,6 +156,10 @@ void PackageKitBackend::createTransaction()
             request.setArguments({QVariant::fromValue<qulonglong>(2), QStringList{candidates_.first()}});
         } else if (operation_ == Operation::CheckUpdates) {
             request.setArguments({QVariant::fromValue<qulonglong>(0)});
+        } else if (operation_ == Operation::InstallFiles) {
+            // PackageKit presents the normal system authorization prompt. The
+            // updater verifies the release asset digest before reaching here.
+            request.setArguments({QVariant::fromValue<qulonglong>(0), filePaths_});
         } else {
             request.setArguments({QVariant::fromValue<qulonglong>(2), updatePackageIds_});
         }
@@ -190,6 +230,16 @@ void PackageKitBackend::transactionFinished(uint exit, uint)
         emit updatesInstalled();
         return;
     }
+    if (operation_ == Operation::InstallFiles) {
+        filePaths_.clear();
+        ++cacheVersion_;
+        busy_ = false;
+        progress_ = 100;
+        status_ = tr("Plaza update installed");
+        emit changed();
+        emit filesInstalled();
+        return;
+    }
     if (operation_ == Operation::Resolve) {
         if (alreadyInstalled_) {
             installed_.insert(package_); ++cacheVersion_; busy_ = false; status_ = tr("Already installed");
@@ -223,6 +273,7 @@ void PackageKitBackend::disconnectTransaction()
 void PackageKitBackend::fail(const QString& message)
 {
     disconnectTransaction();
+    if (operation_ == Operation::InstallFiles) filePaths_.clear();
     qWarning().noquote() << "PackageKit transaction failed:" << message;
     error_ = message;
     busy_ = false;

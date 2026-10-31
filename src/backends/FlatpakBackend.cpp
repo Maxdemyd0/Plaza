@@ -29,6 +29,8 @@
 
 namespace {
 
+constexpr auto FlathubRepoFileUrl = "https://dl.flathub.org/repo/flathub.flatpakrepo";
+
 QString errorText(const GError* error)
 {
     return error != nullptr && error->message != nullptr
@@ -143,6 +145,8 @@ public slots:
         FlatpakRemote* remote = nullptr;
         FlatpakTransaction* transaction = nullptr;
         QString failureMessage;
+        QString transactionRemoteName = remoteName.trimmed();
+        bool addedFlathubRemote = false;
 
         const bool installationReady = ensureInstallation(
             cancellable,
@@ -156,26 +160,45 @@ public slots:
         if (failureMessage.isEmpty()) {
             remote = flatpak_installation_get_remote_by_name(
                 installation_,
-                remoteName.toUtf8().constData(),
+                transactionRemoteName.toUtf8().constData(),
                 cancellable,
                 &error
             );
 
             if (remote == nullptr) {
-                if (error != nullptr &&
-                    error->domain == FLATPAK_ERROR &&
-                    error->code != FLATPAK_ERROR_REMOTE_NOT_FOUND) {
+                const bool remoteNotFound = error != nullptr
+                    && error->domain == FLATPAK_ERROR
+                    && error->code == FLATPAK_ERROR_REMOTE_NOT_FOUND;
+                if (remoteNotFound && transactionRemoteName.compare(QStringLiteral("flathub"), Qt::CaseInsensitive) == 0) {
+                    g_clear_error(&error);
+                    transactionRemoteName = QStringLiteral("flathub");
+                    emit progress(0, QStringLiteral("Setting up Flathub for your user account…"));
+                    addedFlathubRemote = addSignedRemoteFromFile(
+                        transactionRemoteName,
+                        QString::fromLatin1(FlathubRepoFileUrl),
+                        cancellable,
+                        &failureMessage
+                    );
+                    if (addedFlathubRemote) {
+                        remote = flatpak_installation_get_remote_by_name(
+                            installation_, transactionRemoteName.toUtf8().constData(), cancellable, &error);
+                    }
+                } else if (error != nullptr) {
                     qWarning().noquote()
                         << "Flatpak remote lookup failed for"
-                        << remoteName << ":" << error->message;
+                        << transactionRemoteName << ":" << error->message;
                 }
 
-                failureMessage = missingRemoteMessage(remoteName);
+                if (remote == nullptr && failureMessage.isEmpty()) {
+                    failureMessage = remoteNotFound
+                        ? missingRemoteMessage(remoteName)
+                        : errorText(error);
+                }
             }
         }
 
-        if (failureMessage.isEmpty() && flatpak_remote_get_disabled(remote)) {
-            failureMessage = QStringLiteral("The %1 software source is disabled. Enable it on Sources and try again.").arg(remoteName);
+        if (failureMessage.isEmpty() && remote != nullptr && flatpak_remote_get_disabled(remote)) {
+            failureMessage = QStringLiteral("The %1 software source is disabled. Enable it on Sources and try again.").arg(transactionRemoteName);
         }
 
         if (failureMessage.isEmpty()) {
@@ -217,7 +240,7 @@ public slots:
 
             if (!flatpak_transaction_add_install(
                     transaction,
-                    remoteName.toUtf8().constData(),
+                    transactionRemoteName.toUtf8().constData(),
                     ref.toUtf8().constData(),
                     nullptr,
                     &error
@@ -295,6 +318,9 @@ public slots:
             emit cacheLoaded(appIds);
             emit installSucceeded(appId);
         }
+        if (addedFlathubRemote) {
+            emit catalogSourcesChanged();
+        }
     }
 
     void refreshSources()
@@ -343,76 +369,11 @@ public slots:
     void addSource(const QString& name, const QString& url)
     {
         GCancellable* cancellable = beginCancellable();
-        GError* error = nullptr;
-        FlatpakRemote* remote = nullptr;
         QString failure;
-        QByteArray contents;
-        QNetworkAccessManager network;
-        QNetworkRequest request{QUrl(url)};
-        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                             QNetworkRequest::NoLessSafeRedirectPolicy);
-        request.setTransferTimeout(30000);
-        QNetworkReply* reply = network.get(request);
-        QEventLoop eventLoop;
-        QTimer sizeGuard;
-        sizeGuard.setInterval(100);
-        QObject::connect(reply, &QNetworkReply::finished, &eventLoop, &QEventLoop::quit);
-        QObject::connect(&sizeGuard, &QTimer::timeout, &eventLoop, [&] {
-            if (reply->bytesAvailable() + contents.size() > 4 * 1024 * 1024) {
-                reply->abort();
-            }
-            contents += reply->readAll();
-        });
-        sizeGuard.start();
-        const gulong cancelHandler = g_cancellable_connect(
-            cancellable,
-            G_CALLBACK(+[](GCancellable*, gpointer data) {
-                auto* activeReply = static_cast<QNetworkReply*>(data);
-                QMetaObject::invokeMethod(activeReply, [activeReply] {
-                    if (activeReply->isRunning()) activeReply->abort();
-                }, Qt::QueuedConnection);
-            }),
-            reply,
-            nullptr
-        );
-        eventLoop.exec();
-        g_cancellable_disconnect(cancellable, cancelHandler);
-        sizeGuard.stop();
-        contents += reply->readAll();
-        const QUrl finalUrl = reply->url();
-        if (g_cancellable_is_cancelled(cancellable)) {
-            failure = QStringLiteral("Adding the source was cancelled.");
-        } else if (contents.size() > 4 * 1024 * 1024) {
-            failure = QStringLiteral("The Flatpak source file is larger than the 4 MiB safety limit.");
-        } else if (finalUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0) {
-            failure = QStringLiteral("The Flatpak source URL redirected to a non-HTTPS address.");
-        } else if (reply->error() != QNetworkReply::NoError) {
-            failure = QStringLiteral("Could not download the Flatpak source file: %1").arg(reply->errorString());
-        }
-        reply->deleteLater();
-
-        if (failure.isEmpty()) {
-            GBytes* bytes = g_bytes_new(contents.constData(), static_cast<gsize>(contents.size()));
-            remote = flatpak_remote_new_from_file(name.toUtf8().constData(), bytes, &error);
-            g_bytes_unref(bytes);
-            if (remote == nullptr) failure = errorText(error);
-        }
-
-        if (failure.isEmpty() && !flatpak_remote_get_gpg_verify(remote)) {
-            failure = QStringLiteral("This source does not enable GPG verification. Plaza only adds signed Flatpak sources.");
-        }
-
-        if (failure.isEmpty()) {
-            flatpak_remote_set_gpg_verify(remote, TRUE);
-            flatpak_remote_set_disabled(remote, FALSE);
-            if (!ensureInstallation(cancellable, &error) ||
-                !flatpak_installation_add_remote(installation_, remote, FALSE, cancellable, &error)) {
-                failure = errorText(error);
-            }
-        }
+        const bool sourceAdded = addSignedRemoteFromFile(name, url, cancellable, &failure);
 
         QString status = QStringLiteral("Source added");
-        if (failure.isEmpty()) {
+        if (sourceAdded) {
             gboolean changed = FALSE;
             GError* metadataError = nullptr;
             if (!flatpak_installation_update_appstream_sync(
@@ -427,16 +388,11 @@ public slots:
             }
         }
 
-        if (remote != nullptr) g_object_unref(remote);
         const bool cancelled = g_cancellable_is_cancelled(cancellable);
-        if (error != nullptr) {
-            qWarning().noquote() << "Flatpak source operation detail:" << error->message;
-            g_error_free(error);
-        }
         finishCancellable(cancellable);
         if (cancelled) {
             emit operationFailed(QStringLiteral("sources"), QStringLiteral("Adding the source was cancelled."));
-        } else if (!failure.isEmpty()) {
+        } else if (!sourceAdded) {
             emit operationFailed(QStringLiteral("sources"), failure);
         } else {
             refreshSources();
@@ -672,6 +628,123 @@ signals:
     void catalogSourcesChanged();
 
 private:
+    bool addSignedRemoteFromFile(const QString& name, const QString& fileUrl,
+                                 GCancellable* cancellable, QString* failure)
+    {
+        QByteArray contents;
+        QNetworkAccessManager network;
+        QNetworkRequest request{QUrl(fileUrl)};
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+        request.setTransferTimeout(30000);
+        QNetworkReply* reply = network.get(request);
+        QEventLoop eventLoop;
+        QTimer sizeGuard;
+        sizeGuard.setInterval(100);
+        QObject::connect(reply, &QNetworkReply::finished, &eventLoop, &QEventLoop::quit);
+        QObject::connect(&sizeGuard, &QTimer::timeout, &eventLoop, [&] {
+            if (reply->bytesAvailable() + contents.size() > 4 * 1024 * 1024) {
+                reply->abort();
+            }
+            contents += reply->readAll();
+        });
+        sizeGuard.start();
+        const gulong cancelHandler = g_cancellable_connect(
+            cancellable,
+            G_CALLBACK(+[](GCancellable*, gpointer data) {
+                auto* activeReply = static_cast<QNetworkReply*>(data);
+                QMetaObject::invokeMethod(activeReply, [activeReply] {
+                    if (activeReply->isRunning()) activeReply->abort();
+                }, Qt::QueuedConnection);
+            }),
+            reply,
+            nullptr
+        );
+        eventLoop.exec();
+        g_cancellable_disconnect(cancellable, cancelHandler);
+        sizeGuard.stop();
+        contents += reply->readAll();
+
+        QString problem;
+        const QUrl finalUrl = reply->url();
+        if (g_cancellable_is_cancelled(cancellable)) {
+            problem = QStringLiteral("Adding the source was cancelled.");
+        } else if (contents.size() > 4 * 1024 * 1024) {
+            problem = QStringLiteral("The Flatpak source file is larger than the 4 MiB safety limit.");
+        } else if (finalUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0) {
+            problem = QStringLiteral("The Flatpak source URL redirected to a non-HTTPS address.");
+        } else if (reply->error() != QNetworkReply::NoError) {
+            problem = QStringLiteral("Could not download the Flatpak source file: %1").arg(reply->errorString());
+        }
+        reply->deleteLater();
+
+        GKeyFile* repoFile = nullptr;
+        GError* error = nullptr;
+        if (problem.isEmpty()) {
+            repoFile = g_key_file_new();
+            if (!g_key_file_load_from_data(repoFile, contents.constData(),
+                                           static_cast<gsize>(contents.size()),
+                                           G_KEY_FILE_NONE, &error)) {
+                problem = QStringLiteral("The downloaded file is not a valid Flatpak repository configuration.");
+            }
+        }
+
+        if (problem.isEmpty()) {
+            gchar* signingKey = g_key_file_get_string(repoFile, "Flatpak Repo", "GPGKey", &error);
+            if (signingKey == nullptr || signingKey[0] == '\0') {
+                problem = QStringLiteral("This source does not include a signing key. Plaza only adds signed Flatpak sources.");
+            }
+            g_free(signingKey);
+        }
+
+        FlatpakRemote* remote = nullptr;
+        if (problem.isEmpty()) {
+            GBytes* bytes = g_bytes_new(contents.constData(), static_cast<gsize>(contents.size()));
+            remote = flatpak_remote_new_from_file(name.toUtf8().constData(), bytes, &error);
+            g_bytes_unref(bytes);
+            if (remote == nullptr) {
+                problem = errorText(error);
+            }
+        }
+
+        if (problem.isEmpty()) {
+            char* configuredUrl = flatpak_remote_get_url(remote);
+            const QUrl repositoryUrl(QString::fromUtf8(configuredUrl ? configuredUrl : ""));
+            g_free(configuredUrl);
+            if (!repositoryUrl.isValid()
+                || repositoryUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) != 0
+                || repositoryUrl.host().isEmpty()
+                || !repositoryUrl.userInfo().isEmpty()
+                || !repositoryUrl.fragment().isEmpty()) {
+                problem = QStringLiteral("The repository configuration must use an HTTPS URL without embedded credentials.");
+            }
+        }
+
+        if (problem.isEmpty()) {
+            // Flatpak Repo files carry a signing key but libflatpak does not
+            // infer the verification toggle from that key. Enable it only
+            // after verifying the key is present in the downloaded file.
+            flatpak_remote_set_gpg_verify(remote, TRUE);
+            flatpak_remote_set_disabled(remote, FALSE);
+            if (!ensureInstallation(cancellable, &error)
+                || !flatpak_installation_add_remote(installation_, remote, FALSE, cancellable, &error)) {
+                problem = errorText(error);
+            }
+        }
+
+        if (repoFile != nullptr) g_key_file_unref(repoFile);
+        if (remote != nullptr) g_object_unref(remote);
+        if (error != nullptr) {
+            qWarning().noquote() << "Flatpak source configuration detail:" << error->message;
+            g_error_free(error);
+        }
+        if (!problem.isEmpty()) {
+            if (failure != nullptr) *failure = problem;
+            return false;
+        }
+        return true;
+    }
+
     template<typename Configure>
     void modifySource(const QString& name, Configure configure, const QString& status)
     {

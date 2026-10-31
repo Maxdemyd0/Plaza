@@ -223,7 +223,9 @@ void AppListModel::mergeFlatpakApps(const QVector<CatalogApp>& catalog)
     QVector<AppRecord> merged = apps_;
     for (AppRecord& app : merged) {
         app.sources.erase(std::remove_if(app.sources.begin(), app.sources.end(), [](const QVariant& value) {
-            return value.toMap().value(QStringLiteral("backend")).toString() == QStringLiteral("flatpak");
+            const QVariantMap source = value.toMap();
+            return source.value(QStringLiteral("backend")).toString() == QStringLiteral("flatpak") &&
+                source.value(QStringLiteral("repository")).toString().compare(QStringLiteral("flathub"), Qt::CaseInsensitive) != 0;
         }), app.sources.end());
         if (app.backend == QStringLiteral("flatpak")) {
             app.backend.clear();
@@ -290,11 +292,8 @@ void AppListModel::mergeFlatpakApps(const QVector<CatalogApp>& catalog)
 
 bool AppListModel::load(const QString& searchText)
 {
-    /*
-     * A default-constructed QString is null, which QPSQL binds as SQL NULL.
-     * The catalog's empty-search predicate must receive an actual empty text
-     * value so published applications are returned on initial load.
-     */
+    // Keep the initial search value non-null so the empty-search predicate
+    // works consistently with SQLite and PostgreSQL.
     const QString normalizedSearchText = searchText.isNull()
         ? QStringLiteral("")
         : searchText;
@@ -302,7 +301,7 @@ bool AppListModel::load(const QString& searchText)
     if (!database_.isValid()) {
         const QString message =
             QStringLiteral(
-                "The Plaza PostgreSQL database handle is invalid."
+                "The Plaza app catalog database handle is invalid."
             );
 
         qCritical().noquote() << message;
@@ -314,7 +313,7 @@ bool AppListModel::load(const QString& searchText)
     if (!database_.isOpen()) {
         const QString message =
             QStringLiteral(
-                "The Plaza PostgreSQL connection is not open: %1"
+                "The Plaza app catalog is not open: %1"
             ).arg(database_.lastError().text());
 
         qCritical().noquote() << message;
@@ -329,12 +328,7 @@ bool AppListModel::load(const QString& searchText)
         << "database"
         << database_.databaseName();
 
-    /*
-     * This is the crucial fix.
-     *
-     * Passing database_ here prevents QSqlQuery from trying to use Qt's
-     * nonexistent unnamed/default database connection.
-     */
+    // Use the exact catalog connection rather than Qt's default connection.
     QSqlQuery query(database_);
 
     const QString statement = QStringLiteral(R"SQL(
@@ -345,30 +339,14 @@ bool AppListModel::load(const QString& searchText)
             a.summary,
             a.description,
             a.icon_name,
-            a.is_verified,
-            COALESCE(source.backend, ''),
-            COALESCE(source.package_id, ''),
-            COALESCE(source.repository, '')
+            a.is_verified
         FROM apps AS a
-        LEFT JOIN LATERAL (
-            SELECT
-                app_sources.backend,
-                app_sources.package_id,
-                app_sources.repository
-            FROM app_sources
-            WHERE app_sources.app_id = a.id
-              AND app_sources.is_available = TRUE
-            ORDER BY
-                app_sources.priority ASC,
-                app_sources.id ASC
-            LIMIT 1
-        ) AS source ON TRUE
         WHERE a.is_published = TRUE
           AND (
               :search_empty = ''
-              OR a.name ILIKE '%' || :search_name || '%'
-              OR a.summary ILIKE '%' || :search_summary || '%'
-              OR a.component_id ILIKE '%' || :search_component || '%'
+              OR LOWER(a.name) LIKE '%' || LOWER(:search_name) || '%'
+              OR LOWER(a.summary) LIKE '%' || LOWER(:search_summary) || '%'
+              OR LOWER(a.component_id) LIKE '%' || LOWER(:search_component) || '%'
           )
         ORDER BY a.name ASC
     )SQL");

@@ -1,6 +1,8 @@
 #include "../src/backends/FlatpakCatalog.h"
+#include "../src/database/DatabaseController.h"
 #include "../src/models/AppListModel.h"
 
+#include <QTemporaryDir>
 #include <QtTest>
 
 class FlatpakCatalogTest : public QObject
@@ -9,6 +11,7 @@ class FlatpakCatalogTest : public QObject
 private slots:
     void parseAndMerge();
     void databaseSources();
+    void bundledCatalog();
 };
 
 void FlatpakCatalogTest::parseAndMerge()
@@ -69,6 +72,55 @@ void FlatpakCatalogTest::databaseSources()
         QCOMPARE(sources.first().toMap().value(QStringLiteral("repository")).toString(), QStringLiteral("flathub"));
     }
     QVERIFY(foundKrita);
+}
+
+void FlatpakCatalogTest::bundledCatalog()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    DatabaseController database(directory.filePath(QStringLiteral("catalog.sqlite")));
+    QVERIFY2(database.open(), qPrintable(database.lastError()));
+    QVERIFY(database.isOpen());
+
+    AppListModel model(database.database());
+    QVERIFY(model.reload());
+    QVERIFY(model.rowCount() >= 15);
+
+    bool foundKrita = false;
+    bool foundSteam = false;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const QModelIndex index = model.index(row, 0);
+        const QString componentId = model.data(index, AppListModel::ComponentIdRole).toString();
+        if (componentId == QStringLiteral("org.kde.krita")) {
+            foundKrita = true;
+            QCOMPARE(model.data(index, AppListModel::PackageIdRole).toString(), componentId);
+            QCOMPARE(model.data(index, AppListModel::RepositoryRole).toString(), QStringLiteral("flathub"));
+        } else if (componentId == QStringLiteral("com.valvesoftware.Steam")) {
+            foundSteam = true;
+        }
+    }
+    QVERIFY(foundKrita);
+    QVERIFY(foundSteam);
+
+    // The starter Flathub entries remain installable before a remote's
+    // AppStream catalog has been downloaded on a new installation.
+    model.mergeFlatpakApps({});
+    bool starterSourcePreserved = false;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const QModelIndex index = model.index(row, 0);
+        if (model.data(index, AppListModel::ComponentIdRole).toString() != QStringLiteral("org.kde.krita")) continue;
+        const QVariantList sources = model.data(index, AppListModel::SourcesRole).toList();
+        starterSourcePreserved = !sources.isEmpty()
+            && sources.first().toMap().value(QStringLiteral("repository")).toString() == QStringLiteral("flathub");
+        break;
+    }
+    QVERIFY(starterSourcePreserved);
+
+    QVERIFY(model.search(QStringLiteral("firefox")));
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.data(model.index(0, 0), AppListModel::ComponentIdRole).toString(),
+             QStringLiteral("org.mozilla.firefox"));
 }
 
 QTEST_GUILESS_MAIN(FlatpakCatalogTest)

@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -9,6 +10,7 @@
 #include "src/database/DatabaseController.h"
 #include "src/backends/FlatpakBackend.h"
 #include "src/backends/FlatpakCatalog.h"
+#include "src/backends/GitHubUpdateController.h"
 #include "src/backends/PopularityProvider.h"
 #include "src/backends/PackageKitBackend.h"
 #include "src/models/AppListModel.h"
@@ -18,6 +20,7 @@
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/plaza.svg")));
 
     QCoreApplication::setOrganizationName(
         QStringLiteral("Maxdemyd0")
@@ -43,16 +46,16 @@ int main(int argc, char* argv[])
 
     const bool databaseReady = database.open();
 
-    /*
-     * Pass the exact open QPSQL connection into the model.
-     * The model no longer searches for a default connection.
-     */
+    // The bundled local SQLite catalog works without a PostgreSQL service.
     AppListModel appCatalog(database.database());
 
-    const bool catalogDatabaseAvailable = databaseReady && appCatalog.reload();
+    if (databaseReady) {
+        appCatalog.reload();
+    }
 
     FlatpakBackend flatpakBackend;
     PackageKitBackend packageBackend;
+    GitHubUpdateController plazaUpdates(QCoreApplication::applicationVersion(), &packageBackend);
     InstalledAppModel installedApps;
     installedApps.setStoreApps(appCatalog.storeApps());
     installedApps.reload();
@@ -125,7 +128,7 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("installedPage"), &installedPage);
     engine.rootContext()->setContextProperty(QStringLiteral("flatpakCatalog"), &flatpakCatalog);
     engine.rootContext()->setContextProperty(QStringLiteral("packageBackend"), &packageBackend);
-    engine.rootContext()->setContextProperty(QStringLiteral("catalogDatabaseAvailable"), catalogDatabaseAvailable);
+    engine.rootContext()->setContextProperty(QStringLiteral("plazaUpdates"), &plazaUpdates);
     engine.rootContext()->setContextProperty(QStringLiteral("plazaVersion"), QCoreApplication::applicationVersion());
 
     QObject::connect(
@@ -142,6 +145,8 @@ int main(int argc, char* argv[])
         QStringLiteral("Plaza"),
         QStringLiteral("Main")
     );
+
+    plazaUpdates.checkForUpdates();
 
     return app.exec();
 }

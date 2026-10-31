@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Plaza documentation</title>
+  <style>
+    :root { color-scheme: dark; --page:#17191b; --panel:#202326; --line:#373b3f; --text:#f5f5f3; --muted:#b5bbc0; --yellow:#f6c343; font-family:Inter,"Noto Sans","Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--page); color:var(--text); line-height:1.65; }
+    a { color:var(--yellow); }
+    .shell { width:min(900px,calc(100% - 36px)); margin:auto; }
+    header { padding:24px 0; border-bottom:1px solid var(--line); }
+    header a { color:var(--text); text-decoration:none; font-weight:700; }
+    main { padding:48px 0 72px; }
+    h1 { font-size:clamp(2.3rem,7vw,4rem); line-height:1.05; letter-spacing:-.04em; }
+    h2 { margin-top:42px; }
+    .intro { color:var(--muted); font-size:1.15rem; }
+    .card { margin:18px 0; padding:22px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+    .card h3 { margin:0 0 8px; }
+    code, pre { font-family:ui-monospace,"Cascadia Code",monospace; }
+    pre { overflow:auto; padding:16px; border:1px solid var(--line); border-radius:10px; background:#111315; }
+    footer { padding:22px 0; border-top:1px solid var(--line); color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="shell"><a href="../">← Plaza home</a></header>
+  <main class="shell">
+    <p><a href="../">Plaza</a> / Documentation</p>
+    <h1>Plaza documentation</h1>
+    <p class="intro">Install Plaza, understand its package sources, or build it from source.</p>
+
+    <h2>Install Plaza on Debian or Orbis OS</h2>
+    <div class="card">
+      <p>Download the latest <code>.deb</code> package from the <a href="https://github.com/Maxdemyd0/Plaza/releases/latest">GitHub releases page</a>, then open it with the system software installer. Plaza's in-app updater can download newer Plaza releases and hand the package to PackageKit for system-authorized installation.</p>
+      <p>Plaza requires Flatpak for Flatpak installs. Native APT packages and self-updates require PackageKit and its APT backend. Flatpak app installs use the current user's installation; Plaza can add the official Flathub remote the first time an app needs it.</p>
+    </div>
+
+    <h2>Using Plaza</h2>
+    <div class="card">
+      <h3>Discover and install</h3>
+      <p>Search the bundled starter catalog or browse metadata from configured Flatpak remotes. Select a source when multiple compatible sources are listed, then install from the app card. Plaza verifies the official Flathub setup and does not silently substitute an app or repository.</p>
+    </div>
+    <div class="card">
+      <h3>Installed apps and updates</h3>
+      <p>The Installed page scans desktop entries from Flatpak and the system. Update checks use Flatpak and the supported system package manager. A Plaza release update is downloaded from the official GitHub releases API, checked against the published SHA-256 digest, and installed through PackageKit; restart Plaza afterward.</p>
+    </div>
+    <div class="card">
+      <h3>Sources and privacy</h3>
+      <p>Flatpak sources are stored for the current user. Add a repository with an HTTPS <code>.flatpakrepo</code> file and a signing key. The bundled SQLite app catalog works offline; a PostgreSQL service is not required. Update checks contact the public GitHub Releases API.</p>
+    </div>
+
+    <h2>Build from source</h2>
+    <p>Install Qt 6.5 or newer development libraries, the Qt SQLite SQL plugin, Kirigami, libflatpak, zlib, CMake, Ninja, and a C++20 compiler.</p>
+    <pre><code>cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure</code></pre>
+
+    <h2>Support and source</h2>
+    <p>Read the <a href="https://github.com/Maxdemyd0/Plaza/blob/main/README.md">project README</a>, browse the <a href="https://github.com/Maxdemyd0/Plaza">source code</a>, or <a href="https://github.com/Maxdemyd0/Plaza/issues">report an issue</a>.</p>
+  </main>
+  <footer><div class="shell">Plaza · MIT License</div></footer>
+</body>
+</html>

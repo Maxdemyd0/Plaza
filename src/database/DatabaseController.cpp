@@ -1,112 +1,94 @@
 #include "DatabaseController.h"
 
 #include <QDebug>
-#include <QProcessEnvironment>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QSqlError>
+#include <QSqlQuery>
+#include <QStandardPaths>
 #include <QStringList>
+
+#include <utility>
+
+DatabaseController::DatabaseController(QString path)
+    : databasePath_(std::move(path))
+{
+}
 
 DatabaseController::~DatabaseController()
 {
-    if (database_.isValid() && database_.isOpen()) {
-        database_.close();
-    }
+    if (!database_.isValid()) return;
+
+    const QString connectionName = database_.connectionName();
+    database_.close();
+    database_ = QSqlDatabase();
+    QSqlDatabase::removeDatabase(connectionName);
 }
 
 bool DatabaseController::open()
 {
-    if (database_.isValid() && database_.isOpen()) {
-        return true;
-    }
+    if (database_.isValid() && database_.isOpen()) return true;
 
-    if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QPSQL"))) {
+    if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QSQLITE"))) {
         lastError_ = QStringLiteral(
-            "The QPSQL driver is unavailable. Installed Qt SQL drivers: %1"
-        ).arg(QSqlDatabase::drivers().join(QStringLiteral(", ")));
-
+            "The Qt SQLite driver is unavailable. Install the Qt SQLite SQL driver package."
+        );
         qCritical().noquote() << lastError_;
         return false;
     }
 
-    database_ = QSqlDatabase::addDatabase(
-        QStringLiteral("QPSQL"),
-        QString::fromLatin1(ConnectionName)
-    );
-
-    const QProcessEnvironment environment =
-        QProcessEnvironment::systemEnvironment();
-
-    database_.setDatabaseName(
-        environment.value(
-            QStringLiteral("PLAZA_DB_NAME"),
-            QStringLiteral("plaza")
-        )
-    );
-
-    database_.setUserName(
-        environment.value(
-            QStringLiteral("PLAZA_DB_USER"),
-            environment.value(QStringLiteral("USER"))
-        )
-    );
-
-    /*
-     * When PLAZA_DB_HOST is unset, QPSQL uses PostgreSQL's local Unix
-     * socket. On this development machine, that uses peer authentication.
-     *
-     * Set PLAZA_DB_HOST=127.0.0.1 when password-authenticated TCP is
-     * specifically desired.
-     */
-    const QString host =
-        environment.value(QStringLiteral("PLAZA_DB_HOST"));
-
-    if (!host.isEmpty()) {
-        database_.setHostName(host);
+    if (databasePath_.isEmpty()) {
+        databasePath_ = QDir(
+            QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        ).filePath(QStringLiteral("catalog.sqlite"));
     }
 
-    bool portIsValid = false;
-
-    const int port =
-        environment.value(
-            QStringLiteral("PLAZA_DB_PORT"),
-            QStringLiteral("5432")
-        ).toInt(&portIsValid);
-
-    if (portIsValid) {
-        database_.setPort(port);
-    }
-
-    const QString password =
-        environment.value(QStringLiteral("PLAZA_DB_PASSWORD"));
-
-    if (!password.isEmpty()) {
-        database_.setPassword(password);
-    }
-
-    database_.setConnectOptions(
-        QStringLiteral(
-            "connect_timeout=5;"
-            "application_name=Plaza"
-        )
-    );
-
-    if (!database_.open()) {
-        lastError_ = database_.lastError().text();
-
-        qCritical().noquote()
-            << "Could not connect to the Plaza database:"
-            << lastError_;
-
+    const QFileInfo databaseFile(databasePath_);
+    if (!QDir().mkpath(databaseFile.absolutePath())) {
+        lastError_ = QStringLiteral("Could not create Plaza's application data directory.");
+        qCritical().noquote() << lastError_ << databaseFile.absolutePath();
         return false;
     }
 
+    database_ = QSqlDatabase::addDatabase(
+        QStringLiteral("QSQLITE"),
+        QString::fromLatin1(ConnectionName)
+    );
+    database_.setDatabaseName(databasePath_);
+    database_.setConnectOptions(QStringLiteral("QSQLITE_BUSY_TIMEOUT=5000"));
+
+    if (!database_.open()) {
+        lastError_ = database_.lastError().text();
+        qCritical().noquote() << "Could not open Plaza's local app catalog:" << lastError_;
+        return false;
+    }
+
+    QFile bundledCatalog(QStringLiteral(":/db/catalog.sql"));
+    if (!bundledCatalog.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        lastError_ = QStringLiteral("The bundled Plaza app catalog could not be read.");
+        qCritical().noquote() << lastError_ << bundledCatalog.errorString();
+        database_.close();
+        return false;
+    }
+
+    const QStringList statements = QString::fromUtf8(bundledCatalog.readAll())
+        .split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (const QString& statement : statements) {
+        const QString sql = statement.trimmed();
+        if (sql.isEmpty()) continue;
+
+        QSqlQuery query(database_);
+        if (!query.exec(sql)) {
+            lastError_ = query.lastError().text();
+            qCritical().noquote() << "Could not initialize Plaza's local app catalog:" << lastError_;
+            database_.close();
+            return false;
+        }
+    }
+
     lastError_.clear();
-
-    qInfo()
-        << "Connected to PostgreSQL database"
-        << database_.databaseName()
-        << "using Qt connection"
-        << database_.connectionName();
-
+    qInfo().noquote() << "Plaza catalog ready at" << databasePath_;
     return true;
 }
 
@@ -123,4 +105,9 @@ QString DatabaseController::lastError() const
 QSqlDatabase DatabaseController::database() const
 {
     return database_;
+}
+
+QString DatabaseController::databasePath() const
+{
+    return databasePath_;
 }

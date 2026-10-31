@@ -6,7 +6,7 @@
 class DatabaseController
 {
 public:
-    DatabaseController() = default;
+    explicit DatabaseController(QString path = {});
     ~DatabaseController();
 
     DatabaseController(const DatabaseController&) = delete;
@@ -15,13 +15,13 @@ public:
     [[nodiscard]] bool open();
     [[nodiscard]] bool isOpen() const;
     [[nodiscard]] QString lastError() const;
-
-    // QSqlDatabase is a lightweight handle to the existing connection.
     [[nodiscard]] QSqlDatabase database() const;
+    [[nodiscard]] QString databasePath() const;
 
 private:
     static constexpr auto ConnectionName = "plaza-catalog";
 
+    QString databasePath_;
     QSqlDatabase database_;
     QString lastError_;
 };
