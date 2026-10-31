@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Plaza
+GenericName=Software Center
+Comment=Discover, install, and update applications
+Exec=plaza
+Icon=system-software-install
+Terminal=false
+StartupNotify=true
+Categories=Settings;PackageManager;
+Keywords=software;applications;flatpak;packages;store;

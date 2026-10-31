@@ -1,0 +1,22 @@
+# Local IDE settings and per-machine project metadata
+/.idea/
+/.vscode/
+*.user
+*.pro.user
+CMakeUserPresets.json
+
+# CMake build trees and generated files
+/build/
+/cmake-build-*/
+/compile_commands.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
