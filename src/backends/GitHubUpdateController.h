@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE void restartPlaza();
 
     static bool isNewerVersion(const QString& candidate, const QString& current);
+    static QString debianArchitectureForCpu(const QString& architecture);
 
 signals:
     void changed();

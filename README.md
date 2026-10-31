@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Plaza is a Qt 6 / C++20 / QML software center. Version 1.1.0 provides app
+Plaza is a Qt 6 / C++20 / QML software center. Version 1.1.1 provides app
 discovery and search, popularity ordering when catalog scores are available,
 installed-app matching, Flatpak installation and updates, and PackageKit-backed
 APT package operations on supported Debian-based systems.
@@ -34,8 +34,10 @@ does not appear immediately.
 
 Debian and Orbis OS users can download the latest `.deb` from the
 [GitHub releases page](https://github.com/Maxdemyd0/Plaza/releases/latest).
-Release tags also trigger the repository workflow to build and attach the
-Debian package automatically.
+Release tags also trigger the repository workflow to build Debian packages for
+amd64, i386, arm64, and armhf, then attach them automatically. The amd64 build
+works on both Intel 64-bit and AMD64 PCs. Debian 13 treats i386 as legacy
+32-bit compatibility for amd64 systems, not as a supported standalone install.
 
 ## App catalog
 

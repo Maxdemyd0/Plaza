@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Plaza
-        VERSION 1.1.0
+        VERSION 1.1.1
         LANGUAGES CXX
 )
 
@@ -117,6 +117,12 @@ if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$")
 elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE arm64)
     set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_arm64")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86)$")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE i386)
+    set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_i386")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^(armv7l|armv7|armhf)$")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE armhf)
+    set(CPACK_PACKAGE_FILE_NAME "plaza_${PROJECT_VERSION}_armhf")
 endif()
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "packagekit-backend-aptcc")
 include(CPack)

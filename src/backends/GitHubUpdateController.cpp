@@ -28,12 +28,7 @@ constexpr auto apiUrl = "https://api.github.com/repos/Maxdemyd0/Plaza/releases/l
 
 QString debianArchitecture()
 {
-    const QString architecture = QSysInfo::currentCpuArchitecture().toLower();
-    if (architecture == QStringLiteral("x86_64") || architecture == QStringLiteral("x86-64"))
-        return QStringLiteral("amd64");
-    if (architecture == QStringLiteral("aarch64") || architecture == QStringLiteral("arm64"))
-        return QStringLiteral("arm64");
-    return {};
+    return GitHubUpdateController::debianArchitectureForCpu(QSysInfo::buildCpuArchitecture());
 }
 
 QString normalizedVersion(const QString& tag)
@@ -121,6 +116,28 @@ bool GitHubUpdateController::isNewerVersion(const QString& candidate, const QStr
     if (candidateVersion.isEmpty() || currentVersion.isEmpty()) return false;
     return QVersionNumber::compare(QVersionNumber::fromString(candidateVersion),
                                    QVersionNumber::fromString(currentVersion)) > 0;
+}
+
+QString GitHubUpdateController::debianArchitectureForCpu(const QString& cpuArchitecture)
+{
+    const QString architecture = cpuArchitecture.trimmed().toLower();
+    if (architecture == QStringLiteral("x86_64") || architecture == QStringLiteral("x86-64")
+        || architecture == QStringLiteral("amd64")) {
+        return QStringLiteral("amd64");
+    }
+    if (architecture == QStringLiteral("i386") || architecture == QStringLiteral("i486")
+        || architecture == QStringLiteral("i586") || architecture == QStringLiteral("i686")
+        || architecture == QStringLiteral("x86")) {
+        return QStringLiteral("i386");
+    }
+    if (architecture == QStringLiteral("aarch64") || architecture == QStringLiteral("arm64")) {
+        return QStringLiteral("arm64");
+    }
+    if (architecture == QStringLiteral("arm") || architecture == QStringLiteral("armhf")
+        || architecture == QStringLiteral("armv7") || architecture == QStringLiteral("armv7l")) {
+        return QStringLiteral("armhf");
+    }
+    return {};
 }
 
 void GitHubUpdateController::checkForUpdates()
